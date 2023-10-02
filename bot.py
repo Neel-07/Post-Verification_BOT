@@ -3,9 +3,10 @@ from discord.ext import commands
 import os
 import asyncio
 
-intents = discord.Intents.default()
+intents = discord.Intents.all()
 intents.typing = False
 intents.presences = False
+intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
@@ -18,7 +19,7 @@ async def hello(ctx):
 
 @bot.command()
 async def info(ctx):
-    await ctx.send('I am a Discord bot that can do cool things!')
+    await ctx.send('I am a Discord bot that verifies the post for different challenges and maintains your streak !')
 
 @bot.command()
 async def post(ctx):
