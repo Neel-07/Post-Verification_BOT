@@ -97,13 +97,33 @@ async def export(ctx):
 async def distribute_tokens(ctx, amount: int):
     # Check if the user has the necessary permissions (e.g., server administrators)
     if any(role.name == "Administrator" for role in ctx.author.roles):
-        for user_id in eligible_users:
-            # Implement logic to distribute tokens to eligible users
-            # Update user token balances here
-            pass  # Replace with your distribution logic
-        await ctx.send(f"{amount} tokens distributed to eligible participants.")
+        eligible_users = get_eligible_users()  # You should implement this function to fetch eligible users
+        total_users = len(eligible_users)
+
+        if total_users > 0:
+            tokens_per_user = amount // total_users  # Integer division to evenly distribute tokens
+            failed_users = []
+
+            for user_id in eligible_users:
+                try:
+                    # Implement logic to distribute tokens to eligible users
+                    # Update user token balances here
+                    pass  # Replace with your distribution logic
+                except Exception as e:
+                    # If an error occurs while distributing tokens to a user, log the error and continue
+                    print(f"Error distributing tokens to user {user_id}: {str(e)}")
+                    failed_users.append(user_id)
+
+            if failed_users:
+                await ctx.send(f"{amount} tokens distributed to eligible participants, but there were errors for some users.")
+            else:
+                await ctx.send(f"{amount} tokens distributed to all eligible participants.")
+        else:
+            await ctx.send("No eligible users found.")
     else:
         await ctx.send("You do not have permission to distribute tokens.")
+
+
 
 
 @bot.command()
@@ -122,5 +142,5 @@ async def noremind(ctx):
 
 
 # Run the bot with the token stored in the environment variable
-bot.run('MTE1NzcwNDU5NDExNDIzMjQ1MQ.GaCqPw.SezY_UHVLARK0gEHOqCXQtHY3VZJT53Ibs_Lek')
+bot.run('MTE1NzcwNDU5NDExNDIzMjQ1MQ.GK6Acc.qVulN2xf9o1Et8v0MAarSJgXK5zuzJXx8sTBzw')
 
