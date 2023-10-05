@@ -2,12 +2,15 @@ import discord
 from discord.ext import commands
 import os
 import asyncio
+import re
 
+# Intents
 intents = discord.Intents.all()
 intents.typing = False
 intents.presences = False
 intents.message_content = True
 
+# Bot
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Store eligible user IDs
@@ -19,7 +22,7 @@ async def hello(ctx):
 
 @bot.command()
 async def info(ctx):
-    await ctx.send('I am a Discord bot that verifies the post for different challenges and maintains your streak !')
+    await ctx.send('I am a Discord bot that verifies the post for different challenges and maintains your streak!')
 
 @bot.command()
 async def post(ctx):
@@ -31,27 +34,63 @@ async def post(ctx):
             eligible_users.add(ctx.author.id)  # Mark user as eligible
             await ctx.send("Your daily post for the #30DaysOfCode challenge has been counted!")
         else:
-            await ctx.send("Your post format is incorrect. Please follow the guidelines.")
+            await ctx.send("Your post format is incorrect. Please follow the guidelines, and make sure to include either a LinkedIn or Twitter link.")
     else:
         await ctx.send("Please include the #30DaysOfCode hashtag in your post to count it.")
 
-# Define the is_valid_post function for format checks
+
+
 def is_valid_post(message):
     # Implement format checks here (e.g., attachment checks, character count checks)
-    content = message.content.lower()  # Convert to lowercase for case-insensitive checks
+    content = message.content # Convert to lowercase for case-insensitive checks
 
-    # Check if the post contains a screenshot or attachment
-    if not any(attachment.url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')) for attachment in message.attachments):
-        return False  # No valid screenshot or attachment found
+    # Define regex patterns for LinkedIn and Twitter links
+    linkedin_pattern = r"https://www\.linkedin\.com/in/[A-Za-z0-9-]+"
+    twitter_pattern = r"https://twitter\.com/[A-Za-z0-9_]+"
+
+    # Use re.search to find a LinkedIn or Twitter link in the message content
+    linkedin_match = re.search(linkedin_pattern, content)
+    twitter_match = re.search(twitter_pattern, content)
+
+    # Print the matched links for debugging
+    print(f"Content: {content}")
+    print(f"LinkedIn Match: {linkedin_match}")
+    print(f"Twitter Match: {twitter_match}")
 
     # Check for the presence of required hashtags
-    required_hashtags = ["#30daysofcode"]
-    if not all(hashtag in content for hashtag in required_hashtags):
-        return False  # Missing required hashtags
+    required_hashtags = ["#30DaysOfCode"]
+    
+    # Print the result of hashtag check for debugging
+    print(f"Hashtag Check: {all(hashtag in content for hashtag in required_hashtags)}")
 
-    # You can add more checks here as needed (e.g., minimum character count)
+    # Check if at least one of the patterns or the required hashtags is found
+    if (linkedin_match is not None or twitter_match is not None) and all(hashtag in content for hashtag in required_hashtags):
+        return True
+    else:
+        return False
 
-    return True  # All format checks passed
+
+class Event:
+    def __init__(self, name, format, duration_days, eligibility_criteria):
+        self.name = name
+        self.format = format
+        self.duration_days = duration_days
+        self.eligibility_criteria = eligibility_criteria
+        self.start_time = None  # Timestamp when the event starts
+
+events = []  # List to store active events
+
+@bot.command()
+async def createevent(ctx, name, format, duration_days, eligibility_criteria):
+    # Check if the user is an administrator
+    if any(role.name == "Administrator" for role in ctx.author.roles):
+        event = Event(name, format, int(duration_days), int(eligibility_criteria))
+        events.append(event)
+        await ctx.send(f"Event '{name}' created.")
+    else:
+        await ctx.send("You do not have permission to create events.")
+
+# You would need functions to start and stop events, track user participation, validate posts, etc.
 
 
 # Function to update the user's streak
@@ -73,7 +112,6 @@ async def mystreak(ctx):
     else:
         await ctx.send("You don't have an active streak.")
 
-
 @bot.command()
 async def eligibility(ctx):
     if ctx.author.id in eligible_users:
@@ -92,6 +130,11 @@ async def export(ctx):
     else:
         await ctx.send("You do not have permission to export the list.")
 
+# Function to get eligible users (You need to implement this function)
+def get_eligible_users():
+    # Implement the logic to fetch eligible users here
+    # Return a list of eligible user IDs
+    pass
 
 @bot.command()
 async def distribute_tokens(ctx, amount: int):
@@ -116,16 +159,9 @@ async def distribute_tokens(ctx, amount: int):
 
             if failed_users:
                 await ctx.send(f"{amount} tokens distributed to eligible participants, but there were errors for some users.")
-            else:
-                await ctx.send(f"{amount} tokens distributed to all eligible participants.")
-        else:
-            await ctx.send("No eligible users found.")
-    else:
-        await ctx.send("You do not have permission to distribute tokens.")
-
-
-
-
+            
+               
+               
 @bot.command()
 async def remindme(ctx):
     user_id = ctx.author.id
