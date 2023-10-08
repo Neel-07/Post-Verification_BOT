@@ -77,18 +77,35 @@ class Event:
         self.duration_days = duration_days
         self.eligibility_criteria = eligibility_criteria
         self.start_time = None  # Timestamp when the event starts
+        self.participants = set()  # Store user IDs who have posted for this event
+
 
 events = []  # List to store active events
 
 @bot.command()
-async def createevent(ctx, name, format, duration_days, eligibility_criteria):
+async def createevent(ctx, name, format, duration_days: int, eligibility_criteria: int):
     # Check if the user is an administrator
     if any(role.name == "Administrator" for role in ctx.author.roles):
-        event = Event(name, format, int(duration_days), int(eligibility_criteria))
+        # Validate input
+        if duration_days <= 0 or eligibility_criteria < 0:
+            await ctx.send("Invalid input. Duration days should be greater than 0, and eligibility criteria should be non-negative.")
+            return
+
+        # Check if an event with the same name already exists
+        for event in events:
+            if event.name == name:
+                await ctx.send("An event with the same name already exists.")
+                return
+
+        # Create and add the event
+        event = Event(name, format, duration_days, eligibility_criteria)
         events.append(event)
+
         await ctx.send(f"Event '{name}' created.")
     else:
         await ctx.send("You do not have permission to create events.")
+
+
 
 # You would need functions to start and stop events, track user participation, validate posts, etc.
 
@@ -122,18 +139,47 @@ async def eligibility(ctx):
 @bot.command()
 async def export(ctx):
     # Check if the user has the necessary permissions (e.g., server moderators)
-    if any(role.name == "Moderator" for role in ctx.author.roles):
-        eligible_list = "\n".join([str(user) for user in eligible_users])
+    if any(role.name == "Administrator" for role in ctx.author.roles):
+        if eligible_users:
+            eligible_list = "\n".join([str(user) for user in eligible_users])
+            await ctx.send("Eligible participants list:\n" + eligible_list)
+        else:
+            await ctx.send("There are no eligible participants.")
+        # Export the list to a text file
         with open("eligible_participants.txt", "w") as file:
-            file.write(eligible_list)
+            if eligible_users:
+                file.write(eligible_list)
+            else:
+                file.write("No eligible participants.")
         await ctx.send("Eligible participants list exported as eligible_participants.txt.")
     else:
-        await ctx.send("You do not have permission to export the list.")
+        await ctx.send("You do not have permission to view the list.")
+
+
 
 # Function to get eligible users (You need to implement this function)
 def get_eligible_users():
-    # Implement the logic to fetch eligible users here
-    # Return a list of eligible user IDs
+    eligible_users = []
+
+    # Add logic here to determine eligible users
+    for user_id in eligible_users:
+        if is_user_eligible(user_id):
+            eligible_users.append(user_id)
+
+    return eligible_users
+
+def is_user_eligible(user_id):
+    # Check if the user has participated in at least 5 valid posts
+    if get_valid_post_count(user_id) >= 5:
+        return True
+    else:
+        return False
+
+# Example function to get the count of valid posts for a user
+def get_valid_post_count(user_id):
+    # Implement logic to retrieve the count of valid posts for the user
+    # For example, you can query a database or keep track of it in your bot's data
+    # Return the count of valid posts
     pass
 
 @bot.command()
@@ -159,22 +205,44 @@ async def distribute_tokens(ctx, amount: int):
 
             if failed_users:
                 await ctx.send(f"{amount} tokens distributed to eligible participants, but there were errors for some users.")
-            
-               
-               
+    else:
+        await ctx.send("You do not have permission to distribute tokens.")
+
+reminders = {}
+
 @bot.command()
 async def remindme(ctx):
     user_id = ctx.author.id
-    await ctx.send("You will receive daily reminders to post.")
+
+    # Check if the user is already scheduled for reminders
+    if user_id not in reminders:
+        reminders[user_id] = bot.loop.create_task(send_daily_reminder(ctx))
+        await ctx.send("You will receive daily reminders to post.")
+    else:
+        await ctx.send("You are already scheduled to receive reminders.")
+
+async def send_daily_reminder(ctx):
     while True:
-        await asyncio.sleep(86400)  # 24 hours (adjust as needed)
-        if user_id not in eligible_users:
-            await ctx.send("Don't forget to post today!")
+        # Send the reminder message
+        await ctx.send("Don't forget to post today!")
+
+        # Wait for 24 hours before sending the next reminder
+        await asyncio.sleep(86400)  # 24 hours
+
+
+
 
 @bot.command()
 async def noremind(ctx):
-    await ctx.send("You will no longer receive daily reminders.")
-    # Remove the user from the reminders list (implement this logic)
+    user_id = ctx.author.id
+
+    if user_id in reminders:
+        reminders[user_id].cancel()
+        del reminders[user_id]
+        await ctx.send("You will no longer receive daily reminders.")
+    else:
+        await ctx.send("You don't have any active reminders.")
+
 
 
 # Run the bot with the token stored in the environment variable
