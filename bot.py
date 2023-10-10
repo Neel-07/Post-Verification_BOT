@@ -3,6 +3,8 @@ from discord.ext import commands
 import os
 import asyncio
 import re
+import datetime  # Import datetime module for date and time operations
+import csv
 
 # Intents
 intents = discord.Intents.all()
@@ -24,25 +26,44 @@ async def hello(ctx):
 async def info(ctx):
     await ctx.send('I am a Discord bot that verifies the post for different challenges and maintains your streak!')
 
+event_data = {}
+
 @bot.command()
-async def post(ctx):
-    # Check if the message contains the #30DaysOfCode hashtag
-    if "#30DaysOfCode" in ctx.message.content:
+async def post(ctx, event_name: str, *, message_content: str):
+    # Extract the event hashtag from the message content
+    # Assuming that the hashtag is at the end of the message_content
+    parts = message_content.split()
+    event_hashtag = parts[-1] if parts and parts[-1].startswith("#") else ""
+
+    # Check if the event exists
+    if event_name not in event_data:
+        await ctx.send(f"The event '{event_name}' does not exist.")
+        return
+
+    # Check if the message contains the event hashtag
+    if event_hashtag:
         # Check for additional format criteria
-        if is_valid_post(ctx.message):
-            update_streak(ctx.author.id)
-            eligible_users.add(ctx.author.id)  # Mark user as eligible
-            await ctx.send("Your daily post for the #30DaysOfCode challenge has been counted!")
+        if is_valid_post(message_content, event_name, event_hashtag):
+            update_streak(ctx.author.id, event_name)
+            eligible_users.add(ctx.author.id)  # Mark the user as eligible
+            await ctx.send(f"Your daily post for the {event_hashtag} challenge has been counted!")
         else:
-            await ctx.send("Your post format is incorrect. Please follow the guidelines, and make sure to include either a LinkedIn or Twitter link.")
+            await ctx.send(f"Your post format is incorrect. Please follow the guidelines and make sure to include either a LinkedIn or Twitter link along with the {event_hashtag} hashtag.")
     else:
-        await ctx.send("Please include the #30DaysOfCode hashtag in your post to count it.")
+        await ctx.send(f"Please include a valid event hashtag (e.g., #PhotoFun) in your post to count it.")
 
 
 
-def is_valid_post(message):
+
+
+
+
+
+
+
+def is_valid_post(message_content, event_name, event_hashtag):
     # Implement format checks here (e.g., attachment checks, character count checks)
-    content = message.content # Convert to lowercase for case-insensitive checks
+    content = message_content.lower()  # Convert to lowercase for case-insensitive checks
 
     # Define regex patterns for LinkedIn and Twitter links
     linkedin_pattern = r"https://www\.linkedin\.com/in/[A-Za-z0-9-]+"
@@ -52,17 +73,9 @@ def is_valid_post(message):
     linkedin_match = re.search(linkedin_pattern, content)
     twitter_match = re.search(twitter_pattern, content)
 
-    # Print the matched links for debugging
-    print(f"Content: {content}")
-    print(f"LinkedIn Match: {linkedin_match}")
-    print(f"Twitter Match: {twitter_match}")
-
-    # Check for the presence of required hashtags
-    required_hashtags = ["#30DaysOfCode"]
+    # Check for the presence of required hashtags (including the event hashtag)
+    required_hashtags = [f"{event_hashtag.lower()}"]  # Convert the event hashtag to lowercase
     
-    # Print the result of hashtag check for debugging
-    print(f"Hashtag Check: {all(hashtag in content for hashtag in required_hashtags)}")
-
     # Check if at least one of the patterns or the required hashtags is found
     if (linkedin_match is not None or twitter_match is not None) and all(hashtag in content for hashtag in required_hashtags):
         return True
@@ -71,19 +84,20 @@ def is_valid_post(message):
 
 
 class Event:
-    def __init__(self, name, format, duration_days, eligibility_criteria):
+    def __init__(self, name, format, duration_days, eligibility_criteria, post_hashtag):
         self.name = name
         self.format = format
         self.duration_days = duration_days
         self.eligibility_criteria = eligibility_criteria
+        self.post_hashtag = post_hashtag  # Add a new attribute for post hashtag
         self.start_time = None  # Timestamp when the event starts
-        self.participants = set()  # Store user IDs who have posted for this event
+
 
 
 events = []  # List to store active events
 
 @bot.command()
-async def createevent(ctx, name, format, duration_days: int, eligibility_criteria: int):
+async def createevent(ctx, event_name: str, event_format: str, duration_days: int, eligibility_criteria: int, event_hashtag: str):
     # Check if the user is an administrator
     if any(role.name == "Administrator" for role in ctx.author.roles):
         # Validate input
@@ -92,88 +106,131 @@ async def createevent(ctx, name, format, duration_days: int, eligibility_criteri
             return
 
         # Check if an event with the same name already exists
-        for event in events:
-            if event.name == name:
-                await ctx.send("An event with the same name already exists.")
-                return
+        if event_name in event_data:
+            await ctx.send(f"An event with the same name '{event_name}' already exists.")
+            return
 
-        # Create and add the event
-        event = Event(name, format, duration_days, eligibility_criteria)
-        events.append(event)
+        # Create and add the event with the specified data
+        event_data[event_name] = {
+            'format': event_format,
+            'duration_days': duration_days,
+            'eligibility_criteria': eligibility_criteria,
+            'hashtag': event_hashtag,
+            'start_time': datetime.datetime.now(),  # Timestamp when the event starts
+        }
 
-        await ctx.send(f"Event '{name}' created.")
+        await ctx.send(f"Event '{event_name}' created with {event_hashtag} hashtag, format: {event_format}, {duration_days} days duration, and eligibility criteria: {eligibility_criteria}.")
     else:
         await ctx.send("You do not have permission to create events.")
 
 
 
-# You would need functions to start and stop events, track user participation, validate posts, etc.
+
+
 
 
 # Function to update the user's streak
 streaks = {}
 
-def update_streak(user_id):
+def update_streak(user_id, event_name):
     if user_id not in streaks:
-        streaks[user_id] = 1
+        streaks[user_id] = {event_name: 1}
     else:
-        streaks[user_id] += 1
+        if event_name not in streaks[user_id]:
+            streaks[user_id][event_name] = 1
+        else:
+            streaks[user_id][event_name] += 1
 
 @bot.command()
-async def mystreak(ctx):
+async def mystreak(ctx, event_name: str):
     user_id = ctx.author.id
 
-    # Check if the user has a streak
-    if user_id in streaks:
-        await ctx.send(f"Your current streak is {streaks[user_id]} days.")
+    # Check if the user has a streak for the specified event
+    if user_id in streaks and event_name in streaks[user_id]:
+        await ctx.send(f"Your current streak for #{event_name} is {streaks[user_id][event_name]} days.")
     else:
-        await ctx.send("You don't have an active streak.")
+        await ctx.send(f"You don't have an active streak for #{event_name}.")
 
 @bot.command()
-async def eligibility(ctx):
-    if ctx.author.id in eligible_users:
-        await ctx.send("You are eligible for rewards!")
-    else:
-        await ctx.send("You are not eligible for rewards.")
+async def eligibility(ctx, event_name: str):
+    user_id = ctx.author.id
 
-@bot.command()
-async def export(ctx):
-    # Check if the user has the necessary permissions (e.g., server moderators)
-    if any(role.name == "Administrator" for role in ctx.author.roles):
-        if eligible_users:
-            eligible_list = "\n".join([str(user) for user in eligible_users])
-            await ctx.send("Eligible participants list:\n" + eligible_list)
+    # Check if the event exists
+    if event_name not in event_data:
+        await ctx.send(f"The event '{event_name}' does not exist.")
+        return
+
+    # Check if the user has participated in the event for the required number of days
+    if user_id in streaks and event_name in streaks[user_id]:
+        if streaks[user_id][event_name] >= event_data[event_name]['duration_days']:
+            eligible_users_list = [str(user) for user in eligible_users]
+            eligible_list_message = "Eligible participants:\n" + "\n".join(eligible_users_list)
+            await ctx.send(f"You are eligible for rewards in the #{event_name} event!\n{eligible_list_message}")
         else:
-            await ctx.send("There are no eligible participants.")
-        # Export the list to a text file
-        with open("eligible_participants.txt", "w") as file:
-            if eligible_users:
-                file.write(eligible_list)
-            else:
-                file.write("No eligible participants.")
-        await ctx.send("Eligible participants list exported as eligible_participants.txt.")
+            await ctx.send(f"You are not eligible for rewards in the #{event_name} event yet. Keep posting!")
     else:
-        await ctx.send("You do not have permission to view the list.")
+        await ctx.send(f"You are not eligible for rewards in the #{event_name} event yet. Keep posting!")
+
+
+
+
+
+@bot.command()
+async def export(ctx, event_name: str):
+    # Check if the event exists
+    if event_name not in event_data:
+        await ctx.send(f"The event '{event_name}' does not exist.")
+        return
+
+    # Check if the user is an administrator
+    if any(role.name == "Administrator" for role in ctx.author.roles):
+        # Create a CSV file with the list of eligible participants and their usernames
+        eligible_participants = []
+
+        for user_id in eligible_users:
+            user = bot.get_user(user_id)
+            if user:
+                eligible_participants.append(user.name)  # Use user.name to get the username
+
+        file_name = f"{event_name}_participants.csv"
+
+        with open(file_name, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["Username"])  # Change the header to "Username"
+            writer.writerows([[username] for username in eligible_participants])  # Store each username in a separate row
+
+        # Send the CSV file in the Discord channel
+        with open(file_name, "rb") as file:
+            await ctx.send(f"Here is the list of eligible participants for '{event_name}':", file=discord.File(file, file_name))
+
+        # Delete the local CSV file
+        os.remove(file_name)
+    else:
+        await ctx.send("You do not have permission to export participants.")
+
+
+
 
 
 
 # Function to get eligible users (You need to implement this function)
-def get_eligible_users():
+def get_eligible_users(event_name):
     eligible_users = []
 
-    # Add logic here to determine eligible users
-    for user_id in eligible_users:
-        if is_user_eligible(user_id):
+    # Iterate through all users to check eligibility for the specified event
+    for user_id in streaks:
+        if is_user_eligible(user_id, event_name):
             eligible_users.append(user_id)
 
     return eligible_users
 
-def is_user_eligible(user_id):
-    # Check if the user has participated in at least 5 valid posts
-    if get_valid_post_count(user_id) >= 5:
-        return True
-    else:
-        return False
+def is_user_eligible(user_id, event_name):
+    # Check if the user has participated for the required number of days (equal to event duration)
+    if user_id in streaks and event_name in streaks[user_id]:
+        if streaks[user_id][event_name] >= event_data[event_name]['duration_days']:
+            return True
+    return False
+
 
 # Example function to get the count of valid posts for a user
 def get_valid_post_count(user_id):
@@ -182,66 +239,84 @@ def get_valid_post_count(user_id):
     # Return the count of valid posts
     pass
 
+
+# Define a dictionary to store user token balances
+user_tokens = {}
+
 @bot.command()
-async def distribute_tokens(ctx, amount: int):
+async def distribute_tokens(ctx, event_name: str, amount_per_user: int):
+    print(f"Received distribute_tokens command with event_name={event_name}, amount_per_user={amount_per_user}")
+
     # Check if the user has the necessary permissions (e.g., server administrators)
     if any(role.name == "Administrator" for role in ctx.author.roles):
-        eligible_users = get_eligible_users()  # You should implement this function to fetch eligible users
+        print("User has administrator permissions.")
+        eligible_users = get_eligible_users(event_name)  # Fetch eligible users for the specified event
         total_users = len(eligible_users)
 
+        print(f"Total eligible users: {total_users}")
+
         if total_users > 0:
-            tokens_per_user = amount // total_users  # Integer division to evenly distribute tokens
+            total_tokens = amount_per_user * total_users  # Total tokens to distribute
             failed_users = []
 
             for user_id in eligible_users:
                 try:
                     # Implement logic to distribute tokens to eligible users
-                    # Update user token balances here
-                    pass  # Replace with your distribution logic
+                    # Assuming you have a dictionary 'user_tokens' to store user token balances
+                    if user_id in user_tokens:
+                        user_tokens[user_id] += amount_per_user  # Add tokens to the user's balance
+                    else:
+                        user_tokens[user_id] = amount_per_user  # Create a new balance for the user
                 except Exception as e:
                     # If an error occurs while distributing tokens to a user, log the error and continue
-                    print(f"Error distributing tokens to user {user_id}: {str(e)}")
+                    error_message = f"Error distributing tokens to user {user_id}: {str(e)}"
+                    print(error_message)
+                    await ctx.send(error_message)  # Send an error message to the user
                     failed_users.append(user_id)
 
             if failed_users:
-                await ctx.send(f"{amount} tokens distributed to eligible participants, but there were errors for some users.")
+                await ctx.send(f"{total_tokens} tokens distributed to eligible participants, but there were errors for some users.")
+            else:
+                await ctx.send(f"{total_tokens} tokens distributed to eligible participants successfully.")
+        else:
+            await ctx.send("There are no eligible participants for the specified event.")
     else:
         await ctx.send("You do not have permission to distribute tokens.")
 
-reminders = {}
+
+
+
+reminder_flags = {}  # Dictionary to store reminder flags
 
 @bot.command()
 async def remindme(ctx):
     user_id = ctx.author.id
 
-    # Check if the user is already scheduled for reminders
-    if user_id not in reminders:
-        reminders[user_id] = bot.loop.create_task(send_daily_reminder(ctx))
+    if user_id not in reminder_flags or not reminder_flags[user_id]:
+        reminder_flags[user_id] = True
         await ctx.send("You will receive daily reminders to post.")
+        await send_daily_reminder(ctx, user_id)
     else:
         await ctx.send("You are already scheduled to receive reminders.")
 
-async def send_daily_reminder(ctx):
-    while True:
+@bot.command()
+async def noremind(ctx):
+    user_id = ctx.author.id
+
+    if user_id in reminder_flags and reminder_flags[user_id]:
+        reminder_flags[user_id] = False
+        await ctx.send("You will no longer receive daily reminders.")
+    else:
+        await ctx.send("You don't have any active reminders.")
+
+async def send_daily_reminder(ctx, user_id):
+    while reminder_flags.get(user_id, False):
         # Send the reminder message
         await ctx.send("Don't forget to post today!")
 
         # Wait for 24 hours before sending the next reminder
         await asyncio.sleep(86400)  # 24 hours
 
-
-
-
-@bot.command()
-async def noremind(ctx):
-    user_id = ctx.author.id
-
-    if user_id in reminders:
-        reminders[user_id].cancel()
-        del reminders[user_id]
-        await ctx.send("You will no longer receive daily reminders.")
-    else:
-        await ctx.send("You don't have any active reminders.")
 
 
 
