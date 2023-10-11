@@ -321,5 +321,5 @@ async def send_daily_reminder(ctx, user_id):
 
 
 # Run the bot with the token stored in the environment variable
-bot.run('MTE1NzcwNDU5NDExNDIzMjQ1MQ.GK6Acc.qVulN2xf9o1Et8v0MAarSJgXK5zuzJXx8sTBzw')
+bot.run('YOUR_BOT_TOKEN')
 
